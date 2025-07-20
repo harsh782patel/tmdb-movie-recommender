@@ -1,4 +1,4 @@
-# ... (existing imports) ...
+# ... existing imports ...
 import streamlit as st
 import pandas as pd
 import duckdb
@@ -11,6 +11,7 @@ from PIL import Image
 import requests
 from io import BytesIO
 import numpy as np
+import logging
 
 # --- Path Configuration ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,14 +32,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- NumPy Compatibility Workaround ---
+# This must be done BEFORE any other imports that might use NumPy
+if not hasattr(np, '_core') and hasattr(np, 'core'):
+    sys.modules['numpy._core'] = sys.modules['numpy.core']
+    sys.modules['numpy._core.multiarray'] = sys.modules['numpy.core.multiarray']
+
 # --- Helper Functions ---
+def load_model_with_compatibility(model_path):
+    """Load model with NumPy compatibility workaround"""
+    try:
+        return joblib.load(model_path)
+    except ModuleNotFoundError as e:
+        if 'numpy._core' in str(e):
+            # Apply workaround and retry
+            if hasattr(np, 'core') and not hasattr(np, '_core'):
+                sys.modules['numpy._core'] = sys.modules['numpy.core']
+                sys.modules['numpy._core.multiarray'] = sys.modules['numpy.core.multiarray']
+                return joblib.load(model_path)
+        raise
+
 @st.cache_data(show_spinner="Loading models...")
 def load_models():
-    """Load trained recommendation models"""
+    """Load trained recommendation models with version validation"""
     try:
         required_files = [
             'tfidf_model.pkl', 
-            'recommendations.pkl',  # Changed from cosine_sim.pkl
+            'recommendations.pkl',
             'indices.pkl',
             'movies_df.pkl',
             'metadata.json'
@@ -54,9 +74,31 @@ def load_models():
             st.info("Please run the training pipeline first")
             st.stop()
         
-        # Load models
-        tfidf = joblib.load(os.path.join(MODEL_DIR, 'tfidf_model.pkl'))
-        recommendations = joblib.load(os.path.join(MODEL_DIR, 'recommendations.pkl'))  # Changed
+        # Add version validation
+        required_versions = {
+            'numpy': '1.26.0',
+            'scikit-learn': '1.7.0',
+            'scipy': '1.15.3'
+        }
+        
+        version_warnings = []
+        for lib, expected in required_versions.items():
+            try:
+                module = __import__(lib)
+                actual = getattr(module, '__version__', 'unknown')
+                if actual != expected:
+                    version_warnings.append(f"{lib}=={expected} (found {actual})")
+            except ImportError:
+                version_warnings.append(f"{lib} not installed")
+        
+        if version_warnings:
+            st.warning("Version mismatch detected:")
+            for warning in version_warnings:
+                st.write(f"- {warning}")
+        
+        # Load models with compatibility handling
+        tfidf = load_model_with_compatibility(os.path.join(MODEL_DIR, 'tfidf_model.pkl'))
+        recommendations = joblib.load(os.path.join(MODEL_DIR, 'recommendations.pkl'))
         indices = joblib.load(os.path.join(MODEL_DIR, 'indices.pkl'))
         movies_df = joblib.load(os.path.join(MODEL_DIR, 'movies_df.pkl'))
         
@@ -98,7 +140,7 @@ def load_movie_data():
         st.error(f"Error loading movie data: {str(e)}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=24*3600, show_spinner=False)  # Cache posters for 24 hours
+@st.cache_data(ttl=24*3600, show_spinner=False)
 def load_poster(poster_path, width=200):
     """Load and cache movie poster"""
     if not poster_path or pd.isna(poster_path):
@@ -120,7 +162,7 @@ def main():
     # Load models and data
     with st.spinner("Initializing application..."):
         try:
-            tfidf, recommendations, indices, movies_df, metadata = load_models()  # Changed
+            tfidf, recommendations, indices, movies_df, metadata = load_models()
             movies = load_movie_data()
             
             if movies.empty:
@@ -236,7 +278,7 @@ def main():
             # Improved grid handling
             cols = st.columns(5)
             for i, (_, row) in enumerate(top_movies.iterrows()):
-                if i >= 10:  # Safety check
+                if i >= 10:
                     break
                 with cols[i % 5]:
                     with st.container():
