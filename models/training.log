@@ -1,27 +1,27 @@
-2025-07-21 00:10:52,179 - model_training - INFO - Movie Recommendation Model Training
-2025-07-21 00:10:52,179 - model_training - INFO - ==================================
-2025-07-21 00:10:52,180 - model_training - INFO - Starting model training process...
-2025-07-21 00:10:52,357 - model_training - INFO - Successfully loaded 834 movies from database
-2025-07-21 00:10:52,393 - model_training - INFO - Data preprocessing complete. Features: ['adult', 'backdrop_path', 'genre_ids', 'id', 'original_language', 'original_title', 'overview', 'popularity', 'poster_path', 'release_date', 'title', 'video', 'vote_average', 'vote_count', 'content', 'weighted_rating', 'norm_rating', 'last_updated']
-2025-07-21 00:10:52,393 - model_training - INFO - Training content-based model...
-2025-07-21 00:10:52,606 - model_training - INFO - Computing cosine similarity...
-2025-07-21 00:10:52,616 - model_training - INFO - Precomputing top recommendations...
-2025-07-21 00:10:55,372 - model_training - INFO - Precomputed recommendations for 834 movies
-2025-07-21 00:10:56,181 - model_training - INFO - Saved all models and data to models
-2025-07-21 00:10:56,181 - model_training - INFO - Testing recommendations...
-2025-07-21 00:10:56,186 - model_training - INFO - 
-Recommendations for 'Call Me by Your Name':
-2025-07-21 00:10:56,187 - model_training - INFO - - The Alcove (ID: 50433, Similarity: 0.2855)
-2025-07-21 00:10:56,188 - model_training - INFO - - Elio (ID: 1022787, Similarity: 0.1835)
-2025-07-21 00:10:56,188 - model_training - INFO - - Dirty Dancing (ID: 88, Similarity: 0.1347)
-2025-07-21 00:10:56,188 - model_training - INFO - 
-Recommendations for 'Aquaman and the Lost Kingdom':
-2025-07-21 00:10:56,189 - model_training - INFO - - Furious 7 (ID: 168259, Similarity: 0.1147)
-2025-07-21 00:10:56,190 - model_training - INFO - - Black Adam (ID: 436270, Similarity: 0.0943)
-2025-07-21 00:10:56,190 - model_training - INFO - - Wish (ID: 1022796, Similarity: 0.0735)
-2025-07-21 00:10:56,190 - model_training - INFO - 
-Recommendations for 'Squid Game: Making Season 2':
-2025-07-21 00:10:56,191 - model_training - INFO - - Squid Game in Conversation (ID: 1504735, Similarity: 0.2510)
-2025-07-21 00:10:56,191 - model_training - INFO - - Squid Game: Fireplace (ID: 1408248, Similarity: 0.1484)
-2025-07-21 00:10:56,192 - model_training - INFO - - Solo Leveling -ReAwakening- (ID: 1357633, Similarity: 0.1304)
-2025-07-21 00:10:56,199 - model_training - INFO - Model training completed in 4.02 seconds
+2025-07-21 19:33:02,197 - model_training - INFO - Movie Recommendation Model Training
+2025-07-21 19:33:02,197 - model_training - INFO - ==================================
+2025-07-21 19:33:02,197 - model_training - INFO - Starting model training process...
+2025-07-21 19:33:02,313 - model_training - INFO - Successfully loaded 988 movies from database
+2025-07-21 19:33:02,337 - model_training - INFO - Data preprocessing complete. Features: ['adult', 'backdrop_path', 'genre_ids', 'id', 'original_language', 'original_title', 'overview', 'popularity', 'poster_path', 'release_date', 'title', 'video', 'vote_average', 'vote_count', 'genres', 'content', 'weighted_rating', 'norm_rating', 'last_updated']
+2025-07-21 19:33:02,337 - model_training - INFO - Training content-based model...
+2025-07-21 19:33:02,481 - model_training - INFO - Computing cosine similarity...
+2025-07-21 19:33:02,494 - model_training - INFO - Precomputing top recommendations...
+2025-07-21 19:33:05,901 - model_training - INFO - Precomputed recommendations for 988 movies
+2025-07-21 19:33:06,847 - model_training - INFO - Saved all models and data to models
+2025-07-21 19:33:06,848 - model_training - INFO - Testing recommendations...
+2025-07-21 19:33:06,850 - model_training - INFO - 
+Recommendations for 'The Incredible Hulk':
+2025-07-21 19:33:06,851 - model_training - INFO - - Star Wars: The Force Awakens (ID: 140607, Similarity: 0.1384)
+2025-07-21 19:33:06,852 - model_training - INFO - - Megan (ID: 536628, Similarity: 0.1348)
+2025-07-21 19:33:06,853 - model_training - INFO - - The Nun II (ID: 968051, Similarity: 0.1248)
+2025-07-21 19:33:06,853 - model_training - INFO - 
+Recommendations for 'Influencer':
+2025-07-21 19:33:06,854 - model_training - INFO - - Seeds (ID: 1005860, Similarity: 0.2735)
+2025-07-21 19:33:06,854 - model_training - INFO - - Shark Whisperer (ID: 1491570, Similarity: 0.1229)
+2025-07-21 19:33:06,855 - model_training - INFO - - Gone Girl (ID: 210577, Similarity: 0.0866)
+2025-07-21 19:33:06,855 - model_training - INFO - 
+Recommendations for 'Psycho':
+2025-07-21 19:33:06,856 - model_training - INFO - - Once Upon a Time in the West (ID: 335, Similarity: 0.1707)
+2025-07-21 19:33:06,857 - model_training - INFO - - Cheeky (ID: 22705, Similarity: 0.1281)
+2025-07-21 19:33:06,857 - model_training - INFO - - Limitless (ID: 51876, Similarity: 0.1046)
+2025-07-21 19:33:06,866 - model_training - INFO - Model training completed in 4.67 seconds

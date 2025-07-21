@@ -6,7 +6,9 @@
     "release_date": "2023-01-01",
     "vote_average": 7.5,
     "vote_count": 100,
-    "popularity": 50.0
+    "popularity": 50.0,
+    "genres": "Action, Adventure",
+    "poster_path": "/sample1.jpg"
   },
   {
     "id": 2,
@@ -15,6 +17,8 @@
     "release_date": "2023-02-15",
     "vote_average": 8.0,
     "vote_count": 150,
-    "popularity": 75.0
+    "popularity": 75.0,
+    "genres": "Drama, Romance",
+    "poster_path": "/sample2.jpg"
   }
 ]
