@@ -7,8 +7,19 @@ if "numpy" in sys.modules:
     del sys.modules["numpy"]  # Ensure clean numpy import
 
 # Add compatibility shim for NumPy 1.x
-sys.modules['numpy._core'] = None
-sys.modules['numpy._core.multiarray'] = None
+try:
+    import numpy.core as _core
+    sys.modules['numpy._core'] = _core
+    sys.modules['numpy._core.multiarray'] = _core.multiarray
+except ImportError:
+    # If numpy isn't installed yet, create placeholder
+    class DummyModule:
+        def __init__(self, name):
+            self.__name__ = name
+        def __getattr__(self, name):
+            return None
+    sys.modules['numpy._core'] = DummyModule('numpy._core')
+    sys.modules['numpy._core.multiarray'] = DummyModule('numpy._core.multiarray')
 
 # Now import other modules
 import streamlit as st
@@ -48,15 +59,23 @@ def safe_joblib_load(path):
         return joblib.load(path)
     except Exception as e:
         if "numpy._core" in str(e):
-            # Use clean environment for loading
-            import subprocess
-            result = subprocess.run(
-                ["python", "-c", f"import joblib; print(joblib.load('{path}'))"],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                return eval(result.stdout)
+            # Try to repair the module structure
+            try:
+                import numpy.core as _core
+                sys.modules['numpy._core'] = _core
+                sys.modules['numpy._core.multiarray'] = _core.multiarray
+                return joblib.load(path)
+            except Exception:
+                pass
+            
+            # Fallback to direct unpickling
+            try:
+                from joblib import load as joblib_load
+                with open(path, 'rb') as f:
+                    return joblib_load(f)
+            except Exception as e2:
+                st.error(f"Critical model loading error: {str(e2)}")
+                raise
         raise
 
 @st.cache_data(show_spinner="Loading models...")
