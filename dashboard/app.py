@@ -11,6 +11,7 @@ import subprocess
 import time
 import requests
 from io import BytesIO
+import sys
 
 # Configuration
 MODEL_DIR = "models"
@@ -69,7 +70,7 @@ def load_data():
 
 def get_movie_poster(poster_path):
     """Fetch movie poster from TMDB"""
-    if not poster_path or pd.isna(poster_path):
+    if not poster_path or pd.isna(poster_path) or poster_path == 'nan':
         return None
     
     try:
@@ -115,7 +116,7 @@ def display_movie_details(movie):
             # Display genres if available
             if pd.notna(movie.get('genres')) and movie['genres'] != '':
                 st.write("**Genres:**")
-                genres = movie['genres'].split(',')
+                genres = movie['genres'].split(',')[:3]
                 genre_chips = " ".join([f"`{genre.strip()}`" for genre in genres])
                 st.markdown(genre_chips)
             
@@ -131,8 +132,15 @@ def trigger_data_update():
     try:
         # Show spinner while updating
         with st.spinner("Updating movie database. This may take several minutes..."):
+            # Determine the correct script path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            script_path = os.path.join(script_dir, "..", "scripts", "data_ingestion.py")
+            
+            # Use the same Python executable that's running the app
+            python_exec = sys.executable
+            
             result = subprocess.run(
-                ["python", "scripts/data_ingestion.py"],
+                [python_exec, script_path],
                 capture_output=True,
                 text=True,
                 check=True
@@ -144,9 +152,12 @@ def trigger_data_update():
                 time.sleep(2)
                 st.rerun()  # Refresh the app
             else:
-                st.error(f"Update failed: {result.stderr}")
+                error_msg = f"Update failed: {result.stderr}"
+                if not error_msg.strip():
+                    error_msg = f"Update failed with exit code {result.returncode}"
+                st.error(error_msg)
     except subprocess.CalledProcessError as e:
-        st.error(f"Update process failed: {str(e)}")
+        st.error(f"Update process failed: {str(e)}\nError output: {e.stderr}")
     except Exception as e:
         st.error(f"Error during update: {str(e)}")
 
@@ -214,7 +225,7 @@ def main():
         # Pagination
         st.subheader("Movie Selection")
         page_size = 50
-        total_pages = max(1, (len(filtered_movies) // page_size))
+        total_pages = max(1, (len(filtered_movies) + page_size - 1) // page_size)
         
         if len(filtered_movies) > page_size:
             page = st.number_input(
@@ -339,11 +350,11 @@ def main():
                 poster = get_movie_poster(rec_movie.get('poster_path'))
                 
                 if poster:
-                    st.image(poster, use_column_width=True)
+                    st.image(poster, use_container_width=True)
                 else:
                     st.image(
                         "https://via.placeholder.com/150x225?text=Poster+Not+Available",
-                        use_column_width=True
+                        use_container_width=True
                     )
                 
                 st.subheader(rec_movie['title'], help=f"ID: {rec_id}")
