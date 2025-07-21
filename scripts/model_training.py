@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 import logging
 import json
-from scipy.sparse import save_npz, load_npz  # For sparse matrices
+from scipy.sparse import save_npz, load_npz
 
 MODEL_DIR = "models"
 DATA_DIR = "data"
@@ -54,9 +54,11 @@ def preprocess_data(movies):
     movies['overview'] = movies['overview'].fillna('')
     movies['vote_count'] = movies['vote_count'].fillna(0).astype(int)
     movies['vote_average'] = movies['vote_average'].fillna(0)
+    movies['genres'] = movies['genres'].fillna('')
+    movies['poster_path'] = movies['poster_path'].fillna('')
     
     # Create enhanced content field
-    movies['content'] = movies['title'] + ' ' + movies['overview']
+    movies['content'] = movies['title'] + ' ' + movies['overview'] + ' ' + movies['genres']
     
     # Calculate weighted ratings (IMDB formula)
     m = movies['vote_count'].quantile(0.8)
@@ -80,8 +82,8 @@ def train_content_model(movies):
     tfidf = TfidfVectorizer(
         stop_words='english',
         ngram_range=(1, 2),
-        max_features=10000,  # Increased features
-        dtype=np.float32  # Reduce memory
+        max_features=10000,
+        dtype=np.float32
     )
     tfidf_matrix = tfidf.fit_transform(movies['content'])
     
@@ -115,7 +117,7 @@ def save_models(tfidf, recommendations, indices, movies):
     """Persist models and data to disk"""
     try:
         joblib.dump(tfidf, os.path.join(MODEL_DIR, 'tfidf_model.pkl'))
-        joblib.dump(recommendations, os.path.join(MODEL_DIR, 'recommendations.pkl'))  # Changed
+        joblib.dump(recommendations, os.path.join(MODEL_DIR, 'recommendations.pkl'))
         joblib.dump(indices, os.path.join(MODEL_DIR, 'indices.pkl'))
         movies.to_pickle(os.path.join(MODEL_DIR, 'movies_df.pkl'))
         
@@ -136,7 +138,9 @@ def save_models(tfidf, recommendations, indices, movies):
             'min_id': int(movies['id'].min()),
             'max_id': int(movies['id'].max()),
             'min_year': min_year,
-            'max_year': max_year
+            'max_year': max_year,
+            'genres': list(set(g for genres in movies['genres'] 
+                             for g in genres.split(', ') if g))
         }
         with open(os.path.join(MODEL_DIR, 'metadata.json'), 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -166,7 +170,6 @@ def test_recommendations(movies, recommendations, sample_size=3):
             
         recs = recommendations[movie_id][:3]  # Top 3
         
-        # Safe title handling
         try:
             title = movie['title']
             logger.info(f"\nRecommendations for '{title}':")

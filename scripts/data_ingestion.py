@@ -4,7 +4,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 import pandas as pd
-import sqlite3
 import duckdb
 import os
 import json
@@ -12,8 +11,6 @@ import re
 import logging
 import argparse
 from datetime import datetime
-
-# python data_ingestion.py --daemon (For continuous operation with scheduled refreshes)
 
 # Configuration
 DATA_DIR = 'data'
@@ -37,16 +34,14 @@ def create_session_with_retries():
     """Create requests session with retry strategy"""
     session = requests.Session()
     
-    # Configure retry strategy with longer backoff
     retry_strategy = Retry(
-        total=10,  # Increased retries
-        backoff_factor=5,  # Longer backoff
+        total=10,
+        backoff_factor=5,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"],
         respect_retry_after_header=True
     )
     
-    # Mount adapter with timeout
     adapter = HTTPAdapter(
         max_retries=retry_strategy,
         pool_connections=20,
@@ -54,7 +49,6 @@ def create_session_with_retries():
     )
     session.mount("https://", adapter)
     
-    # Configure proxies from environment variables
     proxies = {}
     if os.getenv('HTTP_PROXY'):
         proxies['http'] = os.getenv('HTTP_PROXY')
@@ -70,10 +64,10 @@ def fetch_tmdb_data(pages=50):
     base_url = "https://api.themoviedb.org/3/movie/popular"
     headers = {
         "Accept": "application/json",
-    "User-Agent": "MovieRecommender/1.0",
-    "RateLimit-Limit": "40",  # TMDB rate limits
-    "RateLimit-Remaining": "39",
-    "RateLimit-Reset": "10"
+        "User-Agent": "MovieRecommender/1.0",
+        "RateLimit-Limit": "40",
+        "RateLimit-Remaining": "39",
+        "RateLimit-Reset": "10"
     }
     
     all_movies = []
@@ -84,6 +78,12 @@ def fetch_tmdb_data(pages=50):
         session = create_session_with_retries()
         logger.info(f"Fetching {pages} pages from TMDB API...")
         
+        # First fetch genre mappings
+        genre_url = f"https://api.themoviedb.org/3/genre/movie/list?api_key={TMDB_API_KEY}"
+        genre_response = session.get(genre_url)
+        genre_data = genre_response.json()
+        genre_map = {g['id']: g['name'] for g in genre_data.get('genres', [])}
+        
         for page in range(1, pages + 1):
             logger.info(f"Fetching page {page}/{pages}...")
             params = {
@@ -92,13 +92,9 @@ def fetch_tmdb_data(pages=50):
             }
             
             try:
-                # Add randomized timeout
-                timeout = 10 + (page % 3)  # Vary timeout between 10-12 seconds
+                timeout = 10 + (page % 3)
                 response = session.get(base_url, headers=headers, params=params, timeout=timeout)
-                
-                # Add debug info
                 logger.info(f"  Page {page} status: {response.status_code}, time: {response.elapsed.total_seconds():.2f}s")
-                
                 response.raise_for_status()
                 
                 data = response.json()
@@ -107,20 +103,25 @@ def fetch_tmdb_data(pages=50):
                     logger.warning(f"Warning: Unexpected response format on page {page}")
                     continue
                     
-                page_movies = data['results']
+                # Process each movie to add genres and keep poster_path
+                page_movies = []
+                for movie in data['results']:
+                    movie['genres'] = ', '.join([genre_map[gid] for gid in movie.get('genre_ids', []) 
+                                              if gid in genre_map])
+                    movie['poster_path'] = movie.get('poster_path', '')
+                    page_movies.append(movie)
+                
                 movies_count = len(page_movies)
                 all_movies.extend(page_movies)
                 total_movies += movies_count
                 logger.info(f"  Added {movies_count} movies from page {page}")
                 
-                # Respect rate limits with randomized delay
-                delay = 0.5 + (page % 10)/10  # Vary delay between 0.5-1.5 seconds
+                delay = 0.5 + (page % 10)/10
                 if page < pages:
                     time.sleep(delay)
                     
             except (requests.exceptions.RequestException, ValueError) as e:
                 logger.warning(f"Warning: Failed for page {page}: {str(e)}")
-                # Add extra delay before retrying next page
                 time.sleep(2)
                 continue
                 
@@ -129,7 +130,7 @@ def fetch_tmdb_data(pages=50):
         
     except Exception as e:
         logger.error(f"Warning: Unexpected error: {str(e)}")
-        return pd.DataFrame(all_movies)  # Return partial results
+        return pd.DataFrame(all_movies)
     finally:
         if session:
             session.close()
@@ -162,16 +163,13 @@ def clean_movie_data(df):
     
     # 2. Clean release_date format
     if 'release_date' in df.columns:
-        # Create a mask for valid dates
         pattern = r'^\d{4}-\d{2}-\d{2}$'
         valid_dates = df['release_date'].apply(
             lambda x: bool(re.match(pattern, str(x))) if pd.notnull(x) else False
         )
-        # Count invalid dates before cleaning
         invalid_count = (~valid_dates).sum()
         if invalid_count:
             logger.info(f"Found {invalid_count} invalid date formats - cleaning...")
-            # Replace invalid dates with None
             df.loc[~valid_dates, 'release_date'] = None
         current_year = datetime.now().year
         future_dates = df['release_date'].apply(
@@ -182,32 +180,35 @@ def clean_movie_data(df):
             df.loc[future_dates, 'release_date'] = None
 
     # 3. Fill missing critical fields
-    critical_fields = ['title', 'overview']
+    critical_fields = ['title', 'overview', 'genres']
     for field in critical_fields:
         if field in df.columns:
-            # Count missing values
             missing = df[field].isna().sum()
             if missing:
                 logger.info(f"Filling {missing} missing values in {field}")
-                df.loc[:, field] = df[field].fillna('No overview available')
-            else:
-                df.loc[:, field] = df[field].fillna('')
+                if field == 'genres':
+                    df.loc[:, field] = df[field].fillna('Unknown')
+                else:
+                    df.loc[:, field] = df[field].fillna('')
+    
     # 4. Ensure numeric columns are properly typed
     numeric_fields = ['vote_count', 'vote_average', 'popularity']
     for field in numeric_fields:
         if field in df.columns:
-            # Convert to numeric, coerce errors to NaN
             df.loc[:, field] = pd.to_numeric(df[field], errors='coerce')
-            # Count and fill NaN values
             nan_count = df[field].isna().sum()
             if nan_count:
                 logger.info(f"Filling {nan_count} NaN values in {field}")
                 df.loc[:, field] = df[field].fillna(0)
     
+    # 5. Ensure poster_path is string
+    if 'poster_path' in df.columns:
+        df['poster_path'] = df['poster_path'].fillna('').astype(str)
+    
     return df
 
 def store_data(df):
-    """Store data in DuckDB only"""  # Removed SQLite
+    """Store data in DuckDB"""
     if df.empty:
         logger.warning("No data to store. Using sample data instead.")
         df = load_sample_data()
@@ -219,7 +220,7 @@ def store_data(df):
             
     df = clean_movie_data(df)
     
-    # DuckDB Storage only
+    # DuckDB Storage
     duckdb_path = os.path.join(DATA_DIR, 'movies.duckdb')
     duckdb_conn = None
     try:
@@ -244,7 +245,9 @@ def create_sample_file():
             "release_date": "2023-01-01",
             "vote_average": 7.5,
             "vote_count": 100,
-            "popularity": 50.0
+            "popularity": 50.0,
+            "genres": "Action, Adventure",
+            "poster_path": "/sample1.jpg"
         },
         {
             "id": 2,
@@ -253,7 +256,9 @@ def create_sample_file():
             "release_date": "2023-02-15",
             "vote_average": 8.0,
             "vote_count": 150,
-            "popularity": 75.0
+            "popularity": 75.0,
+            "genres": "Drama, Romance",
+            "poster_path": "/sample2.jpg"
         }
     ]
     sample_path = os.path.join(DATA_DIR, 'sample_movies.json')
@@ -276,45 +281,37 @@ def periodic_data_refresh():
         return False
 
 if __name__ == "__main__":
-    # Set up argument parsing
     parser = argparse.ArgumentParser(description='Movie Data Ingestion Script')
     parser.add_argument('--daemon', action='store_true', 
                         help='Run in daemon mode with scheduled refreshes')
     args = parser.parse_args()
 
-    # Fix Windows console encoding
     if os.name == 'nt':
-        os.system('chcp 65001 > nul')  # Set UTF-8 code page
+        os.system('chcp 65001 > nul')
     
-    # Create sample data file if it doesn't exist
     sample_path = os.path.join(DATA_DIR, 'sample_movies.json')
     if not os.path.exists(sample_path):
         create_sample_file()
     
-    # Fetch data from API
     try:
         movies_df = fetch_tmdb_data(pages=50) 
     except Exception as e:
         logger.error(f"Critical error during fetch: {str(e)}")
         movies_df = pd.DataFrame()
     
-    # Store data in databases
     if not movies_df.empty:
         store_data(movies_df)
         logger.info("Initial data stored successfully!")
     
-    # Exit immediately if not in daemon mode
     if not args.daemon:
         logger.info("Initial data ingestion completed. Exiting.")
         exit(0)
     
-    # Only run scheduled refreshes in daemon mode
     schedule.every().day.at("03:00").do(periodic_data_refresh)
     
     logger.info("Running in daemon mode. Scheduled refreshes set for 3 AM daily.")
     logger.info("Press Ctrl+C to exit...")
     
-    # Keep the script running for scheduled jobs
     while True:
         schedule.run_pending()
         time.sleep(60)
