@@ -1,17 +1,26 @@
-# ... existing imports ...
+import os
+import sys
+import logging
+
+# Apply critical fix BEFORE any imports
+if "numpy" in sys.modules:
+    del sys.modules["numpy"]  # Ensure clean numpy import
+
+# Add compatibility shim for NumPy 1.x
+sys.modules['numpy._core'] = None
+sys.modules['numpy._core.multiarray'] = None
+
+# Now import other modules
 import streamlit as st
 import pandas as pd
 import duckdb
 import joblib
-import os
 import json
-import sys
 from datetime import datetime
 from PIL import Image
 import requests
 from io import BytesIO
 import numpy as np
-import logging
 
 # --- Path Configuration ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,29 +41,27 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- NumPy Compatibility Workaround ---
-# This must be done BEFORE any other imports that might use NumPy
-if not hasattr(np, '_core') and hasattr(np, 'core'):
-    sys.modules['numpy._core'] = sys.modules['numpy.core']
-    sys.modules['numpy._core.multiarray'] = sys.modules['numpy.core.multiarray']
-
 # --- Helper Functions ---
-def load_model_with_compatibility(model_path):
-    """Load model with NumPy compatibility workaround"""
+def safe_joblib_load(path):
+    """Safely load joblib files with NumPy compatibility"""
     try:
-        return joblib.load(model_path)
-    except ModuleNotFoundError as e:
-        if 'numpy._core' in str(e):
-            # Apply workaround and retry
-            if hasattr(np, 'core') and not hasattr(np, '_core'):
-                sys.modules['numpy._core'] = sys.modules['numpy.core']
-                sys.modules['numpy._core.multiarray'] = sys.modules['numpy.core.multiarray']
-                return joblib.load(model_path)
+        return joblib.load(path)
+    except Exception as e:
+        if "numpy._core" in str(e):
+            # Use clean environment for loading
+            import subprocess
+            result = subprocess.run(
+                ["python", "-c", f"import joblib; print(joblib.load('{path}'))"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return eval(result.stdout)
         raise
 
 @st.cache_data(show_spinner="Loading models...")
 def load_models():
-    """Load trained recommendation models with version validation"""
+    """Load trained recommendation models"""
     try:
         required_files = [
             'tfidf_model.pkl', 
@@ -74,30 +81,8 @@ def load_models():
             st.info("Please run the training pipeline first")
             st.stop()
         
-        # Add version validation
-        required_versions = {
-            'numpy': '1.26.0',
-            'scikit-learn': '1.7.0',
-            'scipy': '1.15.3'
-        }
-        
-        version_warnings = []
-        for lib, expected in required_versions.items():
-            try:
-                module = __import__(lib)
-                actual = getattr(module, '__version__', 'unknown')
-                if actual != expected:
-                    version_warnings.append(f"{lib}=={expected} (found {actual})")
-            except ImportError:
-                version_warnings.append(f"{lib} not installed")
-        
-        if version_warnings:
-            st.warning("Version mismatch detected:")
-            for warning in version_warnings:
-                st.write(f"- {warning}")
-        
-        # Load models with compatibility handling
-        tfidf = load_model_with_compatibility(os.path.join(MODEL_DIR, 'tfidf_model.pkl'))
+        # Load models with safe loader
+        tfidf = safe_joblib_load(os.path.join(MODEL_DIR, 'tfidf_model.pkl'))
         recommendations = joblib.load(os.path.join(MODEL_DIR, 'recommendations.pkl'))
         indices = joblib.load(os.path.join(MODEL_DIR, 'indices.pkl'))
         movies_df = joblib.load(os.path.join(MODEL_DIR, 'movies_df.pkl'))
